@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ЖК Каравай | учет продаж</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ЖК Каравай</p>
+          <h1>План продаж и экономика проекта</h1>
+        </div>
+        <div class="top-actions">
+          <button class="ghost-button" id="downloadReport">Скачать отчет</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Разделы">
+        <button class="tab active" data-tab="dashboard">Главная</button>
+        <button class="tab" data-tab="analytics">Аналитика</button>
+        <button class="tab" data-tab="sales">Продажи</button>
+        <button class="tab" data-tab="settings">Параметры и остатки</button>
+        <strong class="nav-time" id="currentDateTime"></strong>
+      </nav>
+
+      <main>
+        <section class="tab-panel active" id="dashboard">
+          <section class="kpi-grid" id="kpiGrid"></section>
+
+          <section class="split-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Продажи до ввода</h2>
+                <span id="monthsLeftText"></span>
+              </div>
+              <div class="metric-list" id="commissionPlan"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>После ввода</h2>
+                <span>остаток проекта</span>
+              </div>
+              <div class="metric-list" id="afterCommissionPlan"></div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Сценарии экономики</h2>
+            </div>
+            <div class="scenario-grid" id="scenarioGrid"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-heading">
+              <h2>Кредит и проценты</h2>
+              <span>для контроля нагрузки</span>
+            </div>
+            <div class="credit-grid" id="creditGrid"></div>
+          </section>
+        </section>
+
+        <section class="tab-panel" id="analytics">
+          <div class="section-head">
+            <div>
+              <h2>Аналитика</h2>
+              <p id="analyticsPeriod"></p>
+            </div>
+          </div>
+
+          <section class="kpi-grid" id="analyticsKpiGrid"></section>
+
+          <section class="split-grid">
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Влияние на среднюю цену м2</h2>
+                <span id="analyticsMonthShare"></span>
+              </div>
+              <div class="metric-list" id="analyticsImpact"></div>
+            </div>
+            <div class="panel">
+              <div class="panel-heading">
+                <h2>Дополнительная аналитика</h2>
+                <span>по прошлому месяцу</span>
+              </div>
+              <div class="metric-list" id="analyticsExtra"></div>
+            </div>
+          </section>
+        </section>
+
+        <section class="tab-panel" id="sales">
+          <div class="section-head">
+            <div>
+              <h2>Продажи отдела продаж</h2>
+            </div>
+          </div>
+          <section class="sync-panel">
+            <div>
+              <h3>Синхронизация с Яндекс-таблицей</h3>
+            </div>
+            <div class="sync-actions">
+              <label class="ghost-button file-button">
+                Загрузить выгрузку
+                <input id="importDealsFile" type="file" accept=".xlsx,.xls,.csv,.tsv,text/csv" />
+              </label>
+            </div>
+            <div class="sync-status" id="syncStatus"></div>
+          </section>
+          <section class="room-stock-panel">
+            <h3>Оставшиеся квартиры в продаже</h3>
+            <div class="room-stock-grid" id="roomStockGrid"></div>
+          </section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>№ п/п</th>
+                  <th>Площадь, м2</th>
+                  <th>Стоимость по ДДУ</th>
+                  <th>Стоимость чистая</th>
+                  <th>М2 грязный</th>
+                  <th>М2 чистый</th>
+                  <th>Дата ДДУ</th>
+                  <th>Комн.</th>
+                  <th>Способ оплаты</th>
+                  <th>Статус сделки</th>
+                </tr>
+              </thead>
+              <tbody id="salesRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="settings">
+          <div class="section-head">
+            <div>
+              <h2>Параметры проекта</h2>
+              <p>Эти цифры управляют расчетами на главной странице.</p>
+            </div>
+            <div class="settings-actions">
+              <button class="primary-button" id="saveSettings">Сохранить</button>
+              <button class="ghost-button" id="addApartment">Добавить квартиру</button>
+            </div>
+          </div>
+          <p class="save-status" id="saveStatus"></p>
+
+          <section class="settings-grid">
+            <label>
+              Общее число квартир
+              <input data-setting="totalApartments" type="number" min="0" step="1" />
+            </label>
+            <label>
+              Общая площадь, м2
+              <input data-setting="totalArea" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              Дата ввода дома
+              <input data-setting="commissionDate" type="date" />
+            </label>
+            <label>
+              Продажи после ввода до
+              <input data-setting="postCommissionSaleEndDate" type="date" />
+            </label>
+            <label>
+              Базовая дата накопленных процентов
+              <input data-setting="interestStartDate" type="date" />
+            </label>
+            <label>
+              Квартир продать до ввода
+              <input data-setting="targetApartmentsCommission" type="number" min="0" step="1" />
+            </label>
+            <label>
+              Цена продаж до ввода, ₽/м2
+              <input data-setting="preCommissionPriceM2" type="number" min="0" step="1000" />
+            </label>
+            <label>
+              Тело кредита для расчета %
+              <input data-setting="loanPrincipal" type="number" min="0" step="100000" />
+            </label>
+            <label>
+              Накопленные проценты на дату расчета
+              <input data-setting="accruedInterest" type="number" min="0" step="100000" />
+            </label>
+            <label>
+              Ставка основного кредита, % годовых
+              <input data-setting="loanRate" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              Дата кредита на дострой
+              <input data-setting="completionStartDate" type="date" />
+            </label>
+            <label>
+              Деньги на дострой
+              <input data-setting="completionFinancing" type="number" min="0" step="100000" />
+            </label>
+            <label>
+              Ставка достроя, % годовых
+              <input data-setting="completionRate" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              Ставка осн. кредита после ввода, %
+              <input data-setting="postCommissionLoanRate" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              Ставка достроя после ввода, %
+              <input data-setting="postCommissionCompletionRate" type="number" min="0" step="0.01" />
+            </label>
+          </section>
+
+          <div class="section-head inventory-head">
+            <div>
+              <h2>Остатки квартир</h2>
+              <p>Можно заполнить список квартир. Если список пустой, остаток считается от общего числа квартир и продаж.</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Квартира</th>
+                  <th>Корпус/секция</th>
+                  <th>Этаж</th>
+                  <th>Площадь, м2</th>
+                  <th>Плановая цена м2</th>
+                  <th>Статус</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="apartmentRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
