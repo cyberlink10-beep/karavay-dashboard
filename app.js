@@ -95,6 +95,10 @@ if (numberValue(state.settings.totalArea) === 11500) {
   state.settings.totalArea = defaults.settings.totalArea;
   saveState();
 }
+if (numberValue(state.settings.initialSoldApartments) !== defaults.settings.initialSoldApartments) {
+  state.settings.initialSoldApartments = defaults.settings.initialSoldApartments;
+  saveState();
+}
 const formatNumber = new Intl.NumberFormat("ru-RU");
 const formatMoney = new Intl.NumberFormat("ru-RU", {
   maximumFractionDigits: 0,
