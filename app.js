@@ -1,5 +1,10 @@
 const STORAGE_KEY = "karavay-dashboard-v2";
+const LOCAL_UPDATED_AT_KEY = "karavay-dashboard-local-updated-at";
+const REMOTE_UPDATED_AT_KEY = "karavay-dashboard-remote-updated-at";
 const SETTINGS_PASSWORD = "777";
+const SITE_PASSWORD = "999";
+const REMOTE_STATE_URL = "/api/state";
+const REMOTE_POLL_INTERVAL_MS = 30000;
 const ROOM_STOCK = {
   1: 142,
   2: 20,
@@ -100,21 +105,148 @@ const formatDateTime = new Intl.DateTimeFormat("ru-RU", {
   dateStyle: "long",
   timeStyle: "short",
 });
+let remoteSyncEnabled = false;
+let isHydratingRemoteState = false;
+let remoteSaveTimer = null;
+let lastRemoteUpdatedAt = localStorage.getItem(REMOTE_UPDATED_AT_KEY) || "";
+let lastLocalUpdatedAt = numberValue(localStorage.getItem(LOCAL_UPDATED_AT_KEY));
+let hasPendingRemoteChanges = lastLocalUpdatedAt > parseTimestamp(lastRemoteUpdatedAt);
+
+function unlockSite() {
+  document.body.classList.remove("locked");
+  sessionStorage.setItem("karavay-site-unlocked", "true");
+}
+
+function lockSite() {
+  document.body.classList.add("locked");
+}
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved && saved.settings && Array.isArray(saved.sales) && Array.isArray(saved.apartments)) {
-      return saved;
-    }
+    return normalizeState(saved);
   } catch (error) {
     console.warn("Не удалось прочитать сохраненные данные", error);
   }
   return structuredClone(defaults);
 }
 
-function saveState() {
+function normalizeState(candidate) {
+  if (!candidate || !candidate.settings || !Array.isArray(candidate.sales) || !Array.isArray(candidate.apartments)) {
+    return structuredClone(defaults);
+  }
+  return {
+    settings: { ...defaults.settings, ...candidate.settings },
+    sales: sortSalesByDate(candidate.sales.map((sale) => ({ ...sale }))),
+    apartments: candidate.apartments.map((apartment) => ({ ...apartment })),
+  };
+}
+
+function applyState(nextState, { persistLocal = true } = {}) {
+  state = normalizeState(nextState);
+  if (persistLocal) localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function setStatusText(selector, text) {
+  const element = document.querySelector(selector);
+  if (element) element.textContent = text;
+}
+
+function scheduleRemoteSave() {
+  if (!remoteSyncEnabled || isHydratingRemoteState) return;
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = window.setTimeout(() => {
+    persistRemoteState().catch((error) => {
+      console.error("Не удалось сохранить данные на сервере", error);
+      setStatusText("#syncStatus", "Не удалось сохранить данные на сервере. Проверьте подключение к базе.");
+    });
+  }, 500);
+}
+
+async function fetchRemoteSnapshot() {
+  const response = await fetch(REMOTE_STATE_URL, { cache: "no-store" });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Не удалось получить данные с сервера.");
+  }
+  return response.json();
+}
+
+async function persistRemoteState() {
+  if (!remoteSyncEnabled) return;
+  const response = await fetch(REMOTE_STATE_URL, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(state),
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || "Не удалось сохранить данные на сервере.");
+  }
+  const payload = await response.json();
+  lastRemoteUpdatedAt = payload.updatedAt || lastRemoteUpdatedAt;
+  localStorage.setItem(REMOTE_UPDATED_AT_KEY, lastRemoteUpdatedAt);
+  hasPendingRemoteChanges = false;
+  setStatusText("#syncStatus", "Данные сохранены в общей базе. Все браузеры увидят обновление.");
+}
+
+async function refreshRemoteState({ silent = false } = {}) {
+  try {
+    const payload = await fetchRemoteSnapshot();
+    if (!payload.state) {
+      remoteSyncEnabled = true;
+      await persistRemoteState();
+      return;
+    }
+    remoteSyncEnabled = true;
+    const remoteUpdatedAt = payload.updatedAt || "";
+    const remoteUpdatedMs = parseTimestamp(remoteUpdatedAt);
+    const localIsNewer = lastLocalUpdatedAt > remoteUpdatedMs;
+    if (hasPendingRemoteChanges || localIsNewer) {
+      if (hasPendingRemoteChanges) {
+        persistRemoteState().catch((error) => {
+          console.error("Не удалось догрузить свежие изменения в общую базу", error);
+        });
+      }
+      if (!silent) {
+        setStatusText(
+          "#syncStatus",
+          "На этом устройстве есть более свежие изменения. Не даю старой базе перезаписать новые продажи.",
+        );
+      }
+      return;
+    }
+    if (!lastRemoteUpdatedAt || payload.updatedAt !== lastRemoteUpdatedAt) {
+      isHydratingRemoteState = true;
+      applyState(payload.state);
+      lastRemoteUpdatedAt = remoteUpdatedAt;
+      localStorage.setItem(REMOTE_UPDATED_AT_KEY, lastRemoteUpdatedAt);
+      renderAll();
+    }
+    if (!silent) setStatusText("#syncStatus", "Общая база подключена. Данные синхронизируются между браузерами.");
+  } catch (error) {
+    if (!silent) {
+      console.warn("Серверная база пока недоступна, работаю локально", error);
+      setStatusText("#syncStatus", "Пока работаем локально. После подключения базы данные будут общими для всех браузеров.");
+    }
+  } finally {
+    isHydratingRemoteState = false;
+  }
+}
+
+function saveState({ remote = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  if (remote) {
+    lastLocalUpdatedAt = Date.now();
+    hasPendingRemoteChanges = true;
+    localStorage.setItem(LOCAL_UPDATED_AT_KEY, String(lastLocalUpdatedAt));
+    scheduleRemoteSave();
+  }
+}
+
+function parseTimestamp(value) {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function numberValue(value) {
@@ -236,8 +368,16 @@ function calculate() {
     ? availableApartments.reduce((sum, apartment) => sum + numberValue(apartment.area), 0)
     : Math.max(0, numberValue(settings.totalArea) - soldArea);
   const averageRemainingArea = remainingCount > 0 ? remainingArea / remainingCount : 0;
+  const soldTowardCommissionPlan = Math.max(
+    0,
+    soldCount - numberValue(settings.initialSoldApartments),
+  );
+  const apartmentsToSellBeforeCommission = Math.max(
+    0,
+    numberValue(settings.targetApartmentsCommission) - soldTowardCommissionPlan,
+  );
   const plannedPreCommissionRevenue =
-    Math.max(0, numberValue(settings.targetApartmentsCommission)) *
+    apartmentsToSellBeforeCommission *
     averageRemainingArea *
     numberValue(settings.preCommissionPriceM2);
   const monthsLeft = monthsUntil(settings.commissionDate, now);
@@ -287,6 +427,8 @@ function calculate() {
     newSoldCount,
     newSoldArea,
     newSoldRevenue,
+    soldTowardCommissionPlan,
+    apartmentsToSellBeforeCommission,
     averageGrossM2: soldArea > 0 ? soldRevenue / soldArea : 0,
     averageNetM2: soldArea > 0 ? soldNetRevenue / soldArea : 0,
     remainingCount,
@@ -468,7 +610,7 @@ function renderDashboard() {
   const totals = calculate();
   document.querySelector("#currentDateTime").textContent = formatDateTime.format(new Date());
   const targetBeforeCommission = numberValue(state.settings.targetApartmentsCommission);
-  const apartmentsToSellBeforeCommission = Math.max(0, targetBeforeCommission);
+  const apartmentsToSellBeforeCommission = totals.apartmentsToSellBeforeCommission;
   const apartmentsPerMonth = totals.monthsLeft > 0 ? apartmentsToSellBeforeCommission / totals.monthsLeft : 0;
   const preCommissionPriceM2 = numberValue(state.settings.preCommissionPriceM2);
   const preCommissionArea = apartmentsToSellBeforeCommission * totals.averageRemainingArea;
@@ -511,8 +653,9 @@ function renderDashboard() {
     totals.monthsLeft > 0 ? `${totals.monthsLeft} мес. до ввода` : "срок ввода наступил";
 
   renderMetricList("#commissionPlan", [
-    ["План квартир до ввода", qty(targetBeforeCommission, " шт.")],
     ["Осталось продать до ввода", qty(apartmentsToSellBeforeCommission, " шт.")],
+    ["План квартир до ввода всего", qty(targetBeforeCommission, " шт.")],
+    ["Продано в зачет плана", qty(totals.soldTowardCommissionPlan, " шт.")],
     ["Площадь продаж до ввода", qty(preCommissionArea, " м2")],
     ["Нужно продавать метров", qty(preCommissionAreaPerMonth, " м2/мес.")],
     ["Цена продажи м2/₽ до ввода", rub(preCommissionPriceM2)],
@@ -970,7 +1113,12 @@ async function importDealsFile(file) {
   saveState();
   renderAll();
   const period = salesDateRange(sales);
-  status.textContent = `Загружено ${sales.length} строк из “Сделки по Караваю”${period ? ` за период ${period}` : ""}. Продажи, главная страница, остатки и сценарии пересчитаны по этому файлу.`;
+  try {
+    await persistRemoteState();
+    status.textContent = `Загружено ${sales.length} строк из “Сделки по Караваю”${period ? ` за период ${period}` : ""}. Продажи, главная страница, остатки и сценарии пересчитаны по этому файлу.`;
+  } catch (error) {
+    status.textContent = `Загружено ${sales.length} строк${period ? ` за период ${period}` : ""}, но общая база не обновилась. На этом устройстве данные уже пересчитаны, старую базу не подпускаю к перезаписи.`;
+  }
 }
 
 function renderAll() {
@@ -1001,11 +1149,16 @@ document.querySelector("#addApartment").addEventListener("click", () => {
   renderAll();
 });
 
-document.querySelector("#saveSettings").addEventListener("click", () => {
+document.querySelector("#saveSettings").addEventListener("click", async () => {
   saveState();
   renderAll();
   const status = document.querySelector("#saveStatus");
-  status.textContent = `Сохранено ${formatDateTime.format(new Date())}`;
+  try {
+    await persistRemoteState();
+    status.textContent = `Сохранено ${formatDateTime.format(new Date())}`;
+  } catch (error) {
+    status.textContent = "Сохранил на этом устройстве, но общая база пока не подтвердила обновление.";
+  }
 });
 
 document.addEventListener("input", (event) => {
@@ -1081,10 +1234,6 @@ function prepareReportPrint() {
 }
 
 function restoreReportPrint() {
-  const explanation = document.querySelector(".credit-explanation");
-  if (explanation && reportDetailsWereOpen !== null) {
-    explanation.open = reportDetailsWereOpen;
-  }
   reportDetailsWereOpen = null;
 }
 
@@ -1095,6 +1244,20 @@ document.querySelector("#downloadReport").addEventListener("click", () => {
 
 window.addEventListener("beforeprint", prepareReportPrint);
 window.addEventListener("afterprint", restoreReportPrint);
+
+document.querySelector("#siteLockForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const input = document.querySelector("#sitePassword");
+  const error = document.querySelector("#siteLockError");
+  if (input.value === SITE_PASSWORD) {
+    error.textContent = "";
+    input.value = "";
+    unlockSite();
+    return;
+  }
+  error.textContent = "Неверный пароль";
+  input.select();
+});
 
 document.querySelector("#importDealsFile").addEventListener("change", async (event) => {
   const file = event.target.files[0];
@@ -1108,5 +1271,18 @@ document.querySelector("#importDealsFile").addEventListener("change", async (eve
   }
 });
 
-renderAll();
-setInterval(renderDashboard, 60000);
+async function initializeApp() {
+  if (sessionStorage.getItem("karavay-site-unlocked") === "true") {
+    unlockSite();
+  } else {
+    lockSite();
+  }
+  renderAll();
+  await refreshRemoteState();
+}
+
+initializeApp();
+setInterval(() => {
+  renderDashboard();
+  refreshRemoteState({ silent: true });
+}, REMOTE_POLL_INTERVAL_MS);
