@@ -7,6 +7,16 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <section class="site-lock" id="siteLock">
+      <form class="site-lock-card" id="siteLockForm">
+        <p class="eyebrow">ЖК Каравай</p>
+        <h1>Вход в систему</h1>
+        <p class="site-lock-text">Введите пароль, чтобы открыть сайт.</p>
+        <input id="sitePassword" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Пароль" />
+        <p class="site-lock-error" id="siteLockError"></p>
+        <button class="primary-button" type="submit">Открыть сайт</button>
+      </form>
+    </section>
     <div class="app-shell">
       <header class="topbar">
         <div>
@@ -14,6 +24,7 @@
           <h1>План продаж и экономика проекта</h1>
         </div>
         <div class="top-actions">
+          <button class="ghost-button" id="downloadAnalyticsReport">Скачать аналитику</button>
           <button class="ghost-button" id="downloadReport">Скачать отчет</button>
         </div>
       </header>

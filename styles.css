@@ -24,10 +24,67 @@ body {
   line-height: 1.45;
 }
 
+body.locked {
+  overflow: hidden;
+}
+
 button,
 input,
 select {
   font: inherit;
+}
+
+.site-lock {
+  align-items: center;
+  background: rgba(246, 247, 248, 0.96);
+  display: none;
+  inset: 0;
+  justify-content: center;
+  padding: 24px;
+  position: fixed;
+  z-index: 30;
+}
+
+body.locked .site-lock {
+  display: flex;
+}
+
+body.locked .app-shell {
+  visibility: hidden;
+}
+
+.site-lock-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 14px;
+  max-width: 420px;
+  padding: 24px;
+  width: min(100%, 420px);
+}
+
+.site-lock-card input {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 44px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.site-lock-text {
+  color: var(--muted);
+  margin: 0;
+}
+
+.site-lock-error {
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0;
+  min-height: 20px;
 }
 
 .app-shell {
@@ -704,6 +761,22 @@ td select:focus,
 
   .tab-panel {
     display: block;
+  }
+
+  body.analytics-report-print .topbar {
+    margin-bottom: 6mm;
+  }
+
+  body.analytics-report-print #dashboard,
+  body.analytics-report-print #sales,
+  body.analytics-report-print #settings {
+    display: none !important;
+  }
+
+  body.analytics-report-print #analytics {
+    break-before: auto;
+    display: block !important;
+    padding-top: 0;
   }
 
   #sales {

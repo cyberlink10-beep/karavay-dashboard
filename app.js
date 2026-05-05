@@ -1230,19 +1230,33 @@ document.addEventListener("click", (event) => {
 });
 
 let reportDetailsWereOpen = null;
+let reportMode = "full";
 
-function prepareReportPrint() {
+function prepareReportPrint(mode = reportMode) {
+  reportMode = mode;
+  document.body.classList.toggle("analytics-report-print", reportMode === "analytics");
   renderDashboard();
+  renderAnalytics(calculate());
   renderSales();
-  document.title = `ЖК Каравай отчет ${dateInputFromDate(new Date())}`;
+  document.title =
+    reportMode === "analytics"
+      ? `ЖК Каравай аналитика ${dateInputFromDate(new Date())}`
+      : `ЖК Каравай отчет ${dateInputFromDate(new Date())}`;
 }
 
 function restoreReportPrint() {
   reportDetailsWereOpen = null;
+  reportMode = "full";
+  document.body.classList.remove("analytics-report-print");
 }
 
 document.querySelector("#downloadReport").addEventListener("click", () => {
-  prepareReportPrint();
+  prepareReportPrint("full");
+  window.print();
+});
+
+document.querySelector("#downloadAnalyticsReport").addEventListener("click", () => {
+  prepareReportPrint("analytics");
   window.print();
 });
 
